@@ -1,4 +1,5 @@
 __author__ = 'andrew'
+
 import numpy as np
 
 
@@ -19,6 +20,7 @@ class RVMRegression:
     w = None
     inv_a = None
     N = 0
+    eps = 1e-4
 
     def __init__(self, alpha=None, betta=None, kernel='linear', coef0=0, gamma=1, degree=2, number_of_iterations=100):
         if alpha:
@@ -32,6 +34,10 @@ class RVMRegression:
         self.gamma = gamma
         self.kernel = kernel
         self.number_of_iterations = number_of_iterations
+        self.relevance_w = []
+        self.relevance_x = []
+        self.relevance_y = []
+
 
     def fit(self, x, t):
         if len(x) == 0:
@@ -42,11 +48,16 @@ class RVMRegression:
         self.D = len(x[0])
         self.N = len(x)
 
+        self.kernel_m = self.N + 1
+
         if self.kernel in ['linear']:
             self.kernel_m = len(x[0])
 
         if self.kernel in ['rbf', 'poly']:
             self.kernel_m = len(x) + 1
+
+        if self.kernel == '2D ex':
+            self.kernel_m = len(x) + 4
 
         self.data_x = x.copy()
         self.data_t = t.copy()
@@ -62,9 +73,8 @@ class RVMRegression:
         w_mp = np.matrix([[]])
         t_matrix = np.matrix(self.data_t)
 
-        print(self.validity())
-
         for k in range(self.number_of_iterations):
+            tmp_m = self.betta * (self.F.T * self.F) + np.matrix(np.diag(self.alpha))
             sigma = np.linalg.inv(self.betta * (self.F.T * self.F) + np.matrix(np.diag(self.alpha)))
             w_mp = sigma * self.F.T * (self.betta * t_matrix)
             for j in range(self.kernel_m):
@@ -75,13 +85,18 @@ class RVMRegression:
                 else:
                     gamma[j] = 1 - self.alpha[j] * sigma.A[j][j]
                     self.alpha[j] = gamma[j] / (w_mp.A[j][0] ** 2)
-            if (np.linalg.norm(t_matrix - self.F * w_mp) ** 2) == 0:
-                self.betta = 1e100
-                break
-            else:
-                self.betta = (self.N - sum(gamma)) / (np.linalg.norm(t_matrix - self.F * np.matrix(w_mp)) ** 2)
+
+            self.betta = (self.N - sum(gamma)) / (np.linalg.norm(t_matrix - self.F * np.matrix(w_mp)) ** 2)
 
         self.w = w_mp
+        self.rel_ind = []
+
+        for i in range(len(self.w)):
+            if abs(self.w.A[i][0]) > self.eps:
+                self.rel_ind.append(i)
+                # self.relevance_w.append(self.w.A[i])
+                # self.relevance_x.append(self.data_x[i] if i != self.kernel_m - 1 else [1])
+                # self.relevance_y.append(self.data_t[i] if i != self.kernel_m - 1 else [0])
 
     def create_f(self):
         self.F = []
@@ -103,23 +118,43 @@ class RVMRegression:
 
     def get_m(self):
         return self.kernel_m
-        if self.kernel in ['linear', 'poly']:
-            return len(self.data_x[0])
 
     def phi(self, x, i):
+
         if self.kernel == 'linear':
             return x[i]
+
         if self.kernel == 'poly':
             if i == self.kernel_m - 1:
                 return 1
-            res = self.coef0
-            for j in range(len(x)):
-                res += x[j] * self.data_x[i][j]
-            return res ** self.degree
+            # res = self.coef0
+            res = x * self.data_x[i].T + self.coef0
+            res **= self.degree
+            return res.A[0][0]
+
         if self.kernel == 'rbf':
             if i == self.kernel_m - 1:
                 return 1
             return np.exp((-1.) * self.gamma * (np.linalg.norm(x - self.data_x[i]) ** 2))
+
+        if self.kernel == 'linear spline':
+            if i == self.kernel_m - 1:
+                return 1
+            x_n = x[0]
+            x_m = self.data_x[i][0]
+            m = min(x_n, x_m)
+            return 1 + x_n * x_m + x_n * x_m * m - (x_n + x_m) * (m**2) / 2 + m**3 / 3
+
+        if self.kernel == '2D ex':
+            if i == self.kernel_m - 1:
+                return 1
+            elif i == 0:
+                return x.A[0][i]
+            elif i == 1:
+                return x.A[0][i]
+            elif i == 2:
+                return x.A[0][1] * x.A[0][0]
+            return np.exp((-1.) * self.gamma * (np.linalg.norm(x.A[0][0] - self.data_x.A[i - 3][0]) ** 2) - 0.001 * (np.linalg.norm(x.A[0][1] - self.data_x.A[i - 3][1]) ** 2))
 
     def predict(self, data_x):
         if self.w is None:
@@ -127,8 +162,8 @@ class RVMRegression:
         t_ans = []
         for x in data_x:
             t = 0
-            for j in range(self.kernel_m):
-                t += self.w.A[j] * self.phi(x, j)
+            for j in self.rel_ind:
+                t += self.w.A[j][0] * self.phi(x, j)
             t_ans.append(t)
         return np.array(t_ans)
 
