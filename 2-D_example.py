@@ -1,10 +1,13 @@
-import numpy as np
+
 import rvm
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import mean_squared_error
 
+print('2D sinc regression example')
+
+np.random.seed(1)
 
 train_x = np.matrix(np.random.uniform(-10, 10, size=(100, 2)))
 train_y = np.sinc(train_x[:,0] / np.pi) + 0.1 * train_x[0:,1]
@@ -41,13 +44,13 @@ ax = fig.add_subplot(1, 2, 2, projection='3d')
 ax.plot_wireframe(X, Y, valid_y, rstride=2, cstride=2)
 ax.scatter(train_x.A[:, 0], train_x.A[:, 1], train_y.A[:, 0], marker='o', c='r')
 
-print(len(cl.rel_ind))
-print(cl.validity())
+print("RELEVANT", len(cl.rel_ind))
+# print(cl.validity())
 
 RMS = np.linalg.norm(valid_y.reshape(valid_y.shape[0] ** 2) - (np.sinc(valid_x[:, 0] / np.pi) + 0.1 * valid_x[:, 1]))
 RMSE = mean_squared_error(valid_y_, (np.sinc(valid_x.A[:, 0] / np.pi) + 0.1 * valid_x.A[:, 1])) ** 0.5
-print(RMSE)
+print("RMSE", RMSE)
 
-#print(cl.w)
+print(cl.w)
 
 plt.show()
